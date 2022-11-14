@@ -19,8 +19,11 @@ def calcavgyards(avgyards, opponents, punt, kickoff): #calculate the average pun
        else: # otherwise sum up the number of yards and divide by number of punts
            val = sum(punt[team])/(len(punt[team]))
        avgyards[team]['Punt'] = val
-       val2 = sum(kickoff[team])/len(kickoff[team]) #sum up number of yards and divide by number of kickoffs
-       avgyards[team]['Kickoff'] = val2
+       if len(kickoff[team]) == 0:
+           val2 = 100
+       else:
+           val2 = sum(kickoff[team])/len(kickoff[team]) #sum up number of yards and divide by number of kickoffs
+           avgyards[team]['Kickoff'] = val2
     return avgyards
 
 def calcspecialplusminus(plusminus, avgyards, team1, team2): #calculate the special teams plusminus score
@@ -102,6 +105,26 @@ def soupIt(url):
     soup = BeautifulSoup(content)
     return soup
 
+def getScore(plays):
+    results = []
+    score = plays.find('section', {'id': '4th'}).findAll('dl')
+    score = score[len(score) - 1]
+    score = score.find('dd').text
+    score = list(score)
+    for i in range(len(score)):
+        if score[i].isdigit() and score[i+1] == '-':
+            score[i+1] = '*'
+        elif score[i] == ' ' and score[i+1].isdigit():
+            score[i] = '+'
+        elif score[i] == ' ' and score[i-1].isdigit():
+            score[i] = '+'
+    score = ''.join(score)
+    score = score.split('*')
+    for team in score:
+        team = team.split('+')
+        results.append(team)
+    return results
+
 def scrape(url):   
     #url= 'https://rhodeslynx.com/sports/football/stats/2021/augustana-college-il-/boxscore/7826'
     soup = soupIt(url)
@@ -118,7 +141,10 @@ def scrape(url):
     OT = plays.find('section', {'id' : 'OT'})
     if OT:
         playByPlay['OT'] = OT.findAll('table')
-    return driveChart, playByPlay
+    results = getScore(plays)
+    print(results[0])
+    print(results[1])
+    return driveChart, playByPlay, results
 #print(type(find[22]))
 #print(find[22].attrs)
 
@@ -132,7 +158,7 @@ def initializeTable(opponents):
     for o in opponents:
         punt[o] = []
         kickoff[o] = []
-        plusminus[o] = {'Offense' : 0, 'Defense': 0, 'Special Teams' : 0}
+        plusminus[o] = {'Offense' : 0, 'Defense': 0, 'Special Teams' : 0, 'Won' : 0}
         avgyards[o] = {'Punt' : 0, 'Kickoff' : 0}
         touchdowns[o] = {'Offense' : 0, 'Defense' : 0, 'Special Teams' : 0}
         turnovers[o] = 0
@@ -144,11 +170,13 @@ def calculateBlocks(playByPlay, plusminus, opponents, possession):
         for drives in playByPlay[quarters]:
             descriptions = drives.findAll('td')
             for string in descriptions:
+                isSpecialTeams = False
                 if len(string) > 0:
                     string = (string.text).replace(',', ' ').split()
                     for word in string:
-
-                        if word.upper() == "BLOCKED":
+                        if word.upper() == 'KICKOFF' or word.upper() == 'PUNT':
+                            isSpecialTeams = True
+                        elif word.upper() == "BLOCKED":
                             team = possession[driveCounter]
                             if opponents[0] == team:
                                 plusminus[team]['Special Teams'] -= 1
@@ -156,11 +184,45 @@ def calculateBlocks(playByPlay, plusminus, opponents, possession):
                             else:
                                 plusminus[team]['Special Teams'] -= 1
                                 plusminus[opponents[0]]['Special Teams'] += 1
-            if drives.find('tfoot'):
+                        elif word.upper() == 'FUMBLED' and isSpecialTeams:
+                            team = possession[driveCounter]
+                            if opponents[0] == team:
+                                plusminus[team]['Special Teams'] += 1
+                                plusminus[opponents[1]]['Special Teams'] -= 1
+                            else:
+                                plusminus[team]['Special Teams'] += 1
+                                plusminus[opponents[0]]['Special Teams'] += 1
+            if drives.find('tfoot') and len(drives.find('tfoot').text) > 1:
                 driveCounter += 1
     return plusminus
 
-def calculatePlusMinus(driveChart, playByPlay):
+def whoWon(results, plusminus):
+    if int(results[0][1]) > int(results[1][0]):
+        results[0][1] = 1
+        results[1][0] = 0
+    elif int(results[0][1]) < int(results[1][0]):
+        results[0][1] = 0
+        results[1][0] = 1
+    else:
+        results[0][1] = 0
+        results[1][0] = 0
+    count1 = 0
+    count2 = 0
+    keys = list(plusminus.keys())
+    for char in results[0][0]:
+        if char in keys[0]:
+            count1 += 1
+        if char in keys[1]:
+            count2 += 1
+    if count1 > count2:
+        plusminus[keys[0]]['Won'] = results[0][1]
+        plusminus[keys[1]]['Won'] = results[1][0]
+    else:
+        plusminus[keys[0]]['Won'] = results[1][0]
+        plusminus[keys[1]]['Won'] = results[0][1]
+    return plusminus
+
+def calculatePlusMinus(driveChart, playByPlay, game_result):
     #print(tableString)
     #tableString = table.findAll('td') 
     categorized = catagorize(driveChart)
@@ -220,6 +282,7 @@ def calculatePlusMinus(driveChart, playByPlay):
     
     plusminus = calcspecialplusminus(plusminus, avgyards, opponents[0], opponents[1]) #calculate who won punt and ko
     plusminus = calculateBlocks(playByPlay, plusminus, opponents, possession) #calculate blocks
+    plusminus = whoWon(game_result, plusminus)
     #print(result)
     #print(began)
     print(plusminus)
@@ -231,15 +294,23 @@ def scrapeSchedule(url):
     soup = soupIt(url)
     web_page = url.split('/')
     web_page = web_page[2]
-    box_scores = soup.findAll('li', {'class' : 'sidearm-schedule-game-links-boxscore'}) 
-    for i in range(6, len(box_scores), 2):
-        box_score_url = box_scores[i].find('a', href = True)
-        scrapeGame('http://'+ web_page + box_score_url['href'])
+    box_scores = soup.findAll('div', {'class' : 'sidearm-schedule-game-row flex flex-wrap flex-align-center row'})
+    conference_games = []
+    for scores in box_scores:
+        label = scores.find('div', {'class' : 'sidearm-schedule-game-conference-conference flex flex-inline noprint'})
+        if len(label.text) > 1:
+            conference_games.append(scores)
+    for game in conference_games:
+        box_score_url = game.find('li', {'class' : 'sidearm-schedule-game-links-boxscore'})
+        if box_score_url :
+            box_score_url = box_score_url.find('a', href = True)
+            scrapeGame('http://'+ web_page + box_score_url['href'])
 
 def scrapeYears(url):
     soup = soupIt(url)
     web_page = url.split('/')
     web_page = web_page[2]
+    schedules = soup.findAll('div', {'class' : 'side-arm-schedule-game-row flex flex-wrap flex-align-center row'})
     diff_schedules = soup.find('select', {'id':'sidearm-schedule-select-season'})
     diff_schedules = diff_schedules.findAll('option', value = True)
     for i in range(5):
@@ -248,14 +319,21 @@ def scrapeYears(url):
 
 def scrapeGame(url):
     scraped = scrape(url)
-    calculatePlusMinus(scraped[0], scraped[1])
+    calculatePlusMinus(scraped[0], scraped[1], scraped[2])
 
-scrapeYears('https://rhodeslynx.com/sports/football/schedule/2022')
-#scrapeSchedule('https://hendrixwarriors.com/sports/football/schedule/2022')
-#main('https://rhodeslynx.com/sports/football/stats/2022/centre-college/boxscore/8340')
-#main('https://rhodeslynx.com/sports/football/stats/2022/berry-college-ga-/boxscore/8341')
-#main('https://rhodeslynx.com/sports/football/stats/2022/trinity-university-texas-/boxscore/8342')
-#main('https://rhodeslynx.com/sports/football/stats/2022/millsaps-college/boxscore/8343')
-#main('https://rhodeslynx.com/sports/football/stats/2022/sewanee/boxscore/8344')
-#scrape('https://rhodeslynx.com/sports/football/stats/2021/hendrix-college/boxscore/7831')
-#scrape('https://hendrixwarriors.com/sports/football/stats/2022/trinity-texas-/boxscore/3968')
+#scrapeYears('https://rhodeslynx.com/sports/football/schedule/2022')
+#scrapeYears('https://centrecolonels.com/sports/football/schedule/2022')
+#scrapeYears('https://gomajors.com/sports/football/schedule/2022')
+#scrapeYears('https://hendrixwarriors.com/sports/football/schedule/2022')
+#scrapeYears('https://lcpioneers.com/sports/football/schedule/2022')
+#scrapeYears('https://goboxers.com/sports/football/schedule/2022')
+#scrapeYears('https://loggerathletics.com/sports/football/schedule/2022')
+#scrapeYears('https://golinfieldwildcats.com/sports/football/schedule/2022')
+#scrapeYears('https://uwwsports.com/sports/football/schedule/2022')
+#scrapeYears('https://uwlathletics.com/sports/football/schedule/2022')
+#scrapeYears('https://uwrfsports.com/sports/football/schedule/2022')
+#for some reason the side causes a bug with this and UWW
+#scrapeYears('https://stoutbluedevils.com/sports/football/schedule/2022')
+#the ranking causes a bug
+#scrapeYears('https://athletics.wheaton.edu/sports/football/schedule/2022')
+scrapeYears('https://athletics.augustana.edu/sports/football/schedule/2022')
