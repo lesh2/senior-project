@@ -1,15 +1,17 @@
 from bs4 import BeautifulSoup
 import requests
+import calculations 
+import database
 
 def calcfieldposition(start, team): #calculate the field position for a team
     startpos = ''.join([i for i in start if i.isdigit()]) #get the yard line
     side = ''.join([i for i in start if not i.isdigit()]) #get the side of the field
-    p = 0
-    side = side.split()[0]
-    if (side != team): #if on the other teams side then the number is going to be greater than 50 
-        startpos = (50 - int(startpos)) + 50
-    elif (startpos == '00' or startpos == '0'): #if its a touchback 
-        startpos = 25
+    if side != '':
+        side = side.split()[0]
+        if (side != team): #if on the other teams side then the number is going to be greater than 50 
+            startpos = (50 - int(startpos)) + 50
+        elif (startpos == '00' or startpos == '0'): #if its a touchback 
+            startpos = 25
     return int(startpos)
 
 def calcavgyards(avgyards, opponents, punt, kickoff): #calculate the average punt and kickoff yards
@@ -65,6 +67,26 @@ def catagorize(tableString):
             result.append(el.text)
         elif(el.attrs['data-label'] == 'Started: How'): #Add how drive started
             began.append(el.text)
+    i = 0
+    while i < len(started):
+        if started[i] == '0':
+            started.pop(i)
+            team.pop(i)
+            ended.pop(i)
+            result.pop(i)
+            began.pop(i)
+        else:
+            i += 1
+    i = 0
+    while i < len(ended):
+        if ended[i] == '0':
+            started.pop(i)
+            team.pop(i)
+            ended.pop(i)
+            result.pop(i)
+            began.pop(i)
+        else:
+            i += 1
     return team, started, ended, result, began, opponents #Return the 5 corresponding lists
 
 def isPunt(team, punt, plusminus, touchdowns, start, i): #Determine the changes that need to occur from a punt
@@ -107,7 +129,12 @@ def soupIt(url):
 
 def getScore(plays):
     results = []
-    score = plays.find('section', {'id': '4th'}).findAll('dl')
+    if plays.find('section', {'id': 'OT'}):
+        score = plays.find('section', {'id': 'OT'}).findAll('dl')
+        if len(score) == 0: #for some reason Centre has an OT tag with no info in it so gotta check
+            score = plays.find('section', {'id': '4th'}).findAll('dl')
+    else:
+        score = plays.find('section', {'id': '4th'}).findAll('dl')
     score = score[len(score) - 1]
     score = score.find('dd').text
     score = list(score)
@@ -118,8 +145,12 @@ def getScore(plays):
             score[i] = '+'
         elif score[i] == ' ' and score[i-1].isdigit():
             score[i] = '+'
+        elif score[i] == '#' and score[i+1].isdigit():
+            score[i] = '*'
+            score[i+1] = '*'
     score = ''.join(score)
     score = score.split('*')
+    score = [team for team in score if team !='']
     for team in score:
         team = team.split('+')
         results.append(team)
@@ -129,21 +160,29 @@ def scrape(url):
     #url= 'https://rhodeslynx.com/sports/football/stats/2021/augustana-college-il-/boxscore/7826'
     soup = soupIt(url)
     driveChart = soup.find('section', {'id' : "drive-chart" })
+    if driveChart == None:
+        return None
     driveChart = driveChart.find('table')
     driveChart = driveChart.findAll('td')
     plays = soup.find('section', {'id' : "play-by-play"})
     playByPlay = {'1st' : [], '2nd' : [], '3rd' : [], '4th' : [], 'OT' : []}
     playByPlay['1st'] = (plays.find('section' , {'id' : '1st'})).findAll('table')
     playByPlay['1st'].pop(0)
-    playByPlay['2nd'] = (plays.find('section' , {'id' : '2nd'})).findAll('table')
+    second = plays.find('section', {'id' : '2nd'})
+    if second: #this is to deal with one Hendrix game that does not have the 2nd quarter labeled
+        playByPlay['2nd'] = second.findAll('table') 
     playByPlay['3rd'] = (plays.find('section' , {'id' : '3rd'})).findAll('table')
-    playByPlay['4th'] = (plays.find('section' , {'id' : '4th'})).findAll('table')
+    fourth = plays.find('section', {'id' : '4th'})
+    if fourth: #this is to deal with one Crown College game that does not have a fourth quarter
+        playByPlay['4th'] = fourth.findAll('table')
+    else:
+        return None
     OT = plays.find('section', {'id' : 'OT'})
     if OT:
         playByPlay['OT'] = OT.findAll('table')
     results = getScore(plays)
-    print(results[0])
-    print(results[1])
+    #print(results[0])
+    #print(results[1])
     return driveChart, playByPlay, results
 #print(type(find[22]))
 #print(find[22].attrs)
@@ -222,16 +261,21 @@ def whoWon(results, plusminus):
         plusminus[keys[1]]['Won'] = results[0][1]
     return plusminus
 
-def calculatePlusMinus(driveChart, playByPlay, game_result):
+def calculatePlusMinus(driveChart, playByPlay, game_result, prevent_doubles):
     #print(tableString)
     #tableString = table.findAll('td') 
     categorized = catagorize(driveChart)
+    if categorized == None:
+        return None
     possession = categorized[0]
     started = categorized[1]
     ended = categorized[2]
     result = categorized[3]
     began = categorized[4]
     opponents = categorized[5]
+    for game in prevent_doubles: #check if the game already happend by going through the current plus minus for the season we are on.
+        if opponents[0] in game.keys() and opponents[1] in game.keys():
+            return None
     initialized = initializeTable(opponents)
     punt = initialized[0]
     kickoff = initialized[1]
@@ -285,12 +329,13 @@ def calculatePlusMinus(driveChart, playByPlay, game_result):
     plusminus = whoWon(game_result, plusminus)
     #print(result)
     #print(began)
-    print(plusminus)
+    #print(plusminus)
     #print(turnovers)
     #print(touchdowns)
     #print(avgyards)
+    return plusminus
 
-def scrapeSchedule(url):
+def scrapeSchedule(url, prevent_doubles):
     soup = soupIt(url)
     web_page = url.split('/')
     web_page = web_page[2]
@@ -300,11 +345,15 @@ def scrapeSchedule(url):
         label = scores.find('div', {'class' : 'sidearm-schedule-game-conference-conference flex flex-inline noprint'})
         if len(label.text) > 1:
             conference_games.append(scores)
+    plusminus_season = []
     for game in conference_games:
         box_score_url = game.find('li', {'class' : 'sidearm-schedule-game-links-boxscore'})
         if box_score_url :
             box_score_url = box_score_url.find('a', href = True)
-            scrapeGame('http://'+ web_page + box_score_url['href'])
+            result = scrapeGame('http://' + web_page + box_score_url['href'], prevent_doubles)
+            if result:
+                plusminus_season.append(result)
+    return plusminus_season
 
 def scrapeYears(url):
     soup = soupIt(url)
@@ -312,28 +361,51 @@ def scrapeYears(url):
     web_page = web_page[2]
     schedules = soup.findAll('div', {'class' : 'side-arm-schedule-game-row flex flex-wrap flex-align-center row'})
     diff_schedules = soup.find('select', {'id':'sidearm-schedule-select-season'})
-    diff_schedules = diff_schedules.findAll('option', value = True)
-    for i in range(5):
-        new_url = diff_schedules[i]['value']
-        scrapeSchedule('http://' + web_page + new_url)
+    diff_schedules = diff_schedules.findAll('option', value = True) 
+    return web_page, diff_schedules
 
-def scrapeGame(url):
+def scrapeGame(url, prevent_doubles):
     scraped = scrape(url)
-    calculatePlusMinus(scraped[0], scraped[1], scraped[2])
+    if scraped == None:
+        return None
+    return calculatePlusMinus(scraped[0], scraped[1], scraped[2], prevent_doubles)
 
-#scrapeYears('https://rhodeslynx.com/sports/football/schedule/2022')
-#scrapeYears('https://centrecolonels.com/sports/football/schedule/2022')
-#scrapeYears('https://gomajors.com/sports/football/schedule/2022')
-#scrapeYears('https://hendrixwarriors.com/sports/football/schedule/2022')
-#scrapeYears('https://lcpioneers.com/sports/football/schedule/2022')
-#scrapeYears('https://goboxers.com/sports/football/schedule/2022')
-#scrapeYears('https://loggerathletics.com/sports/football/schedule/2022')
-#scrapeYears('https://golinfieldwildcats.com/sports/football/schedule/2022')
-#scrapeYears('https://uwwsports.com/sports/football/schedule/2022')
-#scrapeYears('https://uwlathletics.com/sports/football/schedule/2022')
-#scrapeYears('https://uwrfsports.com/sports/football/schedule/2022')
-#for some reason the side causes a bug with this and UWW
-#scrapeYears('https://stoutbluedevils.com/sports/football/schedule/2022')
-#the ranking causes a bug
-#scrapeYears('https://athletics.wheaton.edu/sports/football/schedule/2022')
-scrapeYears('https://athletics.augustana.edu/sports/football/schedule/2022')
+def scrapeConference(conference):
+    for i in range(len(conference)):
+        conference[i] = scrapeYears(conference[i])
+    plusminus_conference = []
+    for i in range(5):
+        prevent_doubles = []
+        for team in conference:
+            new_url = team[1][i]['value']
+            hold = scrapeSchedule('http://' + team[0] + new_url, prevent_doubles)
+            for result in hold:
+                prevent_doubles.append(result)
+        for game in prevent_doubles:
+            plusminus_conference.append(game)
+    return plusminus_conference
+
+
+def bigProduct():
+    saa = ['https://rhodeslynx.com/sports/football/schedule/2022', 'https://centrecolonels.com/sports/football/schedule/2022', 'https://gomajors.com/sports/football/schedule/2022', 'https://hendrixwarriors.com/sports/football/schedule/2022']
+    nwc = ['https://lcpioneers.com/sports/football/schedule/2022', 'https://goboxers.com/sports/football/schedule/2022','https://loggerathletics.com/sports/football/schedule/2022', 'https://golinfieldwildcats.com/sports/football/schedule/2022']
+    wiac = ['https://uwwsports.com/sports/football/schedule/2022', 'https://uwlathletics.com/sports/football/schedule/2022', 'https://uwrfsports.com/sports/football/schedule/2022', 'https://stoutbluedevils.com/sports/football/schedule/2022']
+    cciw = ['https://athletics.wheaton.edu/sports/football/schedule/2022','https://athletics.augustana.edu/sports/football/schedule/2022','https://northcentralcardinals.com/sports/football/schedule/2022','https://washubears.com/sports/football/schedule/2022', 'https://athletics.northpark.edu/sports/football/schedule/2022']
+    miac = ['https://gojohnnies.com/sports/football/schedule/2022', 'https://athletics.bethel.edu/sports/football/schedule/2022','https://athletics.carleton.edu/sports/football/schedule/2022','https://hamlineathletics.com/sports/football/schedule/2022']
+    umac = ['https://mlcknights.com/sports/football/schedule/2022','https://fulions.com/sports/football/schedule/2022', 'https://morriscougars.com/sports/football/schedule/2022', 'https://athletics.crown.edu/sports/football/schedule/2022']
+    umac_results = scrapeConference(umac)
+    print(len(umac_results))
+    database.add_to_table(umac_results)
+    #calculations.calculate_stats(umac_results)
+    #saa_results = scrapeConference(saa)
+    #print(len(saa_results))
+    #nwc_results = scrapeConference(nwc)
+    #print(len(nwc_results))
+    #wiac_results = scrapeConference(wiac)
+    #print(len(wiac_results))
+    #cciw_results = scrapeConference(cciw)
+    #print(len(cciw_results))
+    #miac_results = scrapeConference(miac)
+    #print(len(miac_results))
+
+bigProduct()
