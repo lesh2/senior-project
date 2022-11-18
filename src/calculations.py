@@ -1,5 +1,6 @@
 import math
 import statistics
+import database
 
 def num_won(met_goal, won):
     num_won = 0
@@ -35,8 +36,6 @@ def max_team(category):
     max_val = -math.inf
     for i in range(len(category)):
         if category[i] > max_val:
-            print(i)
-            print(len(category))
             maximum = [i]
             max_val = category[i]
         elif category[i] == max_val:
@@ -71,22 +70,6 @@ def get_teams(team, won, indexes):
             else:
                 print(team[i] + ' lost.')
 
-def sort_it(conference):
-    offense = []
-    defense = []
-    special_teams = []
-    won = []
-    teams = []
-    for result in conference:
-        for team in result.keys():
-            offense.append(result[team]['Offense'])
-            defense.append(result[team]['Defense'])
-            special_teams.append(result[team]['Special Teams'])
-            won.append(result[team]['Won'])
-            teams.append(team)
-    return offense, defense, special_teams, teams, won
-
-
 def calculate_max_and_min(offense, defense, special_teams, teams, won):
     offense_max = max_team(offense)
     offense_min = min_team(offense)
@@ -113,12 +96,22 @@ def calculate_max_and_min(offense, defense, special_teams, teams, won):
     print('It occured in: ')
     get_teams(teams, won, special_teams_min)
 
+def print_stats_one(num_met_goal, won, phase):
+    print('The Number of Teams That Met The Goal on ' + phase + ' is: ' + str(len(num_met_goal)))
+    print('The Number of Those Teams That Won is: ' + str(num_won(num_met_goal, won)))
+    print('Thats a Clip of: ' + str(num_won(num_met_goal,won)/len(num_met_goal)))
+
+def print_stats_two(num_met_goal, won, phase1, phase2):
+    print('The Number of Teams That Met The Goal on ' + phase1 + ' and ' + phase2 + ' is: ' + str(len(num_met_goal)))
+    print('The Number of Those Teams That Won is: ' + str(num_won(num_met_goal, won)))
+    print('Thats a Clip of: ' + str(num_won(num_met_goal,won)/len(num_met_goal)))
+
 def calculate_stats(conference):
-    sort = sort_it(conference)
-    offense = sort[0]
-    defense = sort[1]
-    special_teams = sort[2]
-    teams = sort[3]
+    sort = database.conference_sort(conference)
+    teams = sort[0]
+    offense = sort[1]
+    defense = sort[2]
+    special_teams = sort[3]
     won = sort[4]
     calculate_max_and_min(offense, defense, special_teams, teams, won)
     num_met_goal = met_goal(offense, defense, special_teams)
@@ -130,23 +123,15 @@ def calculate_stats(conference):
             phase = 'Defense'
         else:
             phase = 'Special Teams'
-        print('The Number of Teams That Met The Goal on ' + phase + ' is: ' + str(len(num_met_goal[i])))
-        print('The Number of Those Teams That Won is: ' + str(num_won(num_met_goal[i], won)))
+        print_stats_one(num_met_goal[i], won, phase)
     offense_defense = met_two_goals(num_met_goal[0], num_met_goal[1])
-    print('The Number of Teams That Met The Goal on Offense and Defense is: '
-            + str(len(offense_defense)))
-    print('The Number of Those Teams That Won is: ' + str(num_won(offense_defense, won)))
+    print_stats_two(offense_defense, won, 'Offense', 'Defense')
     offense_specials = met_two_goals(num_met_goal[0], num_met_goal[2])
-    print('The Number of Teams That Met The Goal on Offense and Special Teams is: ' 
-            + str(len(offense_specials)))
-    print('The Number of Those Teams That Won is: ' + str(num_won(offense_specials, won)))
+    print_stats_two(offense_specials, won, 'Offense', 'Defense')
     defense_specials = met_two_goals(num_met_goal[1], num_met_goal[2])
-    print('The Number of Teams That Met The Goal on Defense and Special Teams is: ' 
-            + str(len(defense_specials)))
-    print('The Number of Those Teams That Won is ' + str(num_won(defense_specials, won)))
+    print_stats_two(defense_specials, won, 'Defense', 'Special Teams')
     all_three = met_three_goals(num_met_goal[0], num_met_goal[1], num_met_goal[2])
     print('The Number of Teams That Met The Goal in All Three Phases is: '
             + str(len(all_three)))
     print('The Number of Those Teams That Won is ' + str(num_won(all_three, won)))
-
-
+    print('Thats a Clip of: ' + str(num_won(all_three, won)/len(all_three)))

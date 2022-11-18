@@ -2,6 +2,7 @@ from bs4 import BeautifulSoup
 import requests
 import calculations 
 import database
+import links
 
 def calcfieldposition(start, team): #calculate the field position for a team
     startpos = ''.join([i for i in start if i.isdigit()]) #get the yard line
@@ -181,8 +182,8 @@ def scrape(url):
     if OT:
         playByPlay['OT'] = OT.findAll('table')
     results = getScore(plays)
-    #print(results[0])
-    #print(results[1])
+    print(results[0])
+    print(results[1])
     return driveChart, playByPlay, results
 #print(type(find[22]))
 #print(find[22].attrs)
@@ -223,14 +224,14 @@ def calculateBlocks(playByPlay, plusminus, opponents, possession):
                             else:
                                 plusminus[team]['Special Teams'] -= 1
                                 plusminus[opponents[0]]['Special Teams'] += 1
-                        elif word.upper() == 'FUMBLED' and isSpecialTeams:
+                        elif word.upper() == 'FUMBLED' and isSpecialTeams or word.upper() == 'FUMBLE' and isSpecialTeams                            :
                             team = possession[driveCounter]
                             if opponents[0] == team:
                                 plusminus[team]['Special Teams'] += 1
                                 plusminus[opponents[1]]['Special Teams'] -= 1
                             else:
                                 plusminus[team]['Special Teams'] += 1
-                                plusminus[opponents[0]]['Special Teams'] += 1
+                                plusminus[opponents[0]]['Special Teams'] -= 1
             if drives.find('tfoot') and len(drives.find('tfoot').text) > 1:
                 driveCounter += 1
     return plusminus
@@ -306,7 +307,11 @@ def calculatePlusMinus(driveChart, playByPlay, game_result, prevent_doubles):
                     touchdowns[possession[i]]['Defense'] += 1
             #print(plusminus)
         if (result[i] == 'FUMB' or result[i] == 'INT'): #Check if the result of drive is turnover
-            plusminus[possession[i]]['Offense'] -= 1 #Change plus minus accordingly 
+            if i != len(result) - 1: #check to see if it was last drive of game
+                if began[i + 1] != 'PUNT': #make sure fumble did not happen on special teams
+                    plusminus[possession[i]]['Offense'] -= 1
+            else:
+                plusminus[possession[i]]['Offense'] -= 1 #Change plus minus accordingly 
             #print(plusminus)
         elif (result[i] == 'TD'): #other option is a TD
             if(start != 100): #make sure the score wasn't from defense or specials
@@ -386,26 +391,23 @@ def scrapeConference(conference):
     return plusminus_conference
 
 
-def bigProduct():
-    saa = ['https://rhodeslynx.com/sports/football/schedule/2022', 'https://centrecolonels.com/sports/football/schedule/2022', 'https://gomajors.com/sports/football/schedule/2022', 'https://hendrixwarriors.com/sports/football/schedule/2022']
-    nwc = ['https://lcpioneers.com/sports/football/schedule/2022', 'https://goboxers.com/sports/football/schedule/2022','https://loggerathletics.com/sports/football/schedule/2022', 'https://golinfieldwildcats.com/sports/football/schedule/2022']
-    wiac = ['https://uwwsports.com/sports/football/schedule/2022', 'https://uwlathletics.com/sports/football/schedule/2022', 'https://uwrfsports.com/sports/football/schedule/2022', 'https://stoutbluedevils.com/sports/football/schedule/2022']
-    cciw = ['https://athletics.wheaton.edu/sports/football/schedule/2022','https://athletics.augustana.edu/sports/football/schedule/2022','https://northcentralcardinals.com/sports/football/schedule/2022','https://washubears.com/sports/football/schedule/2022', 'https://athletics.northpark.edu/sports/football/schedule/2022']
-    miac = ['https://gojohnnies.com/sports/football/schedule/2022', 'https://athletics.bethel.edu/sports/football/schedule/2022','https://athletics.carleton.edu/sports/football/schedule/2022','https://hamlineathletics.com/sports/football/schedule/2022']
-    umac = ['https://mlcknights.com/sports/football/schedule/2022','https://fulions.com/sports/football/schedule/2022', 'https://morriscougars.com/sports/football/schedule/2022', 'https://athletics.crown.edu/sports/football/schedule/2022']
-    umac_results = scrapeConference(umac)
-    print(len(umac_results))
-    database.add_to_table(umac_results)
+def main():
+    #umac_results = scrapeConference(umac)
+    #print(len(umac_results))
+    #database.add_to_table(umac_results)
     #calculations.calculate_stats(umac_results)
     #saa_results = scrapeConference(saa)
     #print(len(saa_results))
-    #nwc_results = scrapeConference(nwc)
+    #nwc_results = scrapeConference(links.nwc)
     #print(len(nwc_results))
-    #wiac_results = scrapeConference(wiac)
+    #wiac_results = scrapeConference(links.wiac)
     #print(len(wiac_results))
-    #cciw_results = scrapeConference(cciw)
+    #cciw_results = scrapeConference(links.cciw)
     #print(len(cciw_results))
     #miac_results = scrapeConference(miac)
     #print(len(miac_results))
+    asc_results = scrapeConference(links.asc)
+    print(len(asc_results))
+    database.add_to_table(asc_results, 'ASC')
 
-bigProduct()
+main()
