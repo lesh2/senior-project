@@ -12,3 +12,11 @@ miac = ['https://gojohnnies.com/sports/football/schedule/2022', 'https://athleti
 umac = ['https://unweagles.com/sports/football/schedule','https://mlcknights.com/sports/football/schedule/2022','https://fulions.com/sports/football/schedule/2022', 'https://morriscougars.com/sports/football/schedule/2022', 'https://athletics.crown.edu/sports/football/schedule/2022']
 
 asc = ['https://cruathletics.com/sports/football/schedule/2022', 'https://srlobos.com/sports/football/schedule/?path=football','https://mcmurrysports.com/sports/football/schedule']
+
+oac = ['https://pioneers.marietta.edu/sports/football/schedule/2022','https://otterbeincardinals.com/sports/football/schedule/2022','https://jcusports.com/sports/football/schedule/2022']
+
+e8 = ['https://uticapioneers.com/sports/football/schedule/2022','https://www.hartwickhawks.com/sports/football/schedule/2022','https://www.cortlandreddragons.com/sports/football/schedule/2022','https://morrisvillemustangs.com/sports/football/schedule/2022','https://gosaxons.com/sports/football/schedule/2022']
+
+liberty = ['https://athletics.ithaca.edu/sports/football/schedule/2022','https://hwsathletics.com/sports/football/schedule/2022','https://uofrathletics.com/sports/football/schedule/2022', 'https://saintsathletics.com/sports/football/schedule/2022', 'https://buffalostateathletics.com/sports/football/schedule/2022', 'https://rpiathletics.com/sports/football/schedule/2022','https://unionathletics.com/sports/football/schedule/2022']
+
+pac = ['https://thielathletics.com/sports/football/schedule/2022', 'https://athletics.westminster.edu/sports/football/schedule/2022', 'https://waynesburgsports.com/sports/football/schedule/2022','https://gopresidents.com/sports/football/schedule/2022','https://athletics.geneva.edu/sports/football/schedule/2022','https://athletics.gcc.edu/sports/football/schedule/2022']

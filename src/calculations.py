@@ -1,6 +1,10 @@
 import math
 import statistics
 import database
+import matplotlib.pyplot as plt
+import numpy as np
+import models 
+import databasenames as names
 
 def num_won(met_goal, won):
     num_won = 0
@@ -30,6 +34,16 @@ def met_goal(offense, defense, special_teams):
         if special_teams[i] >= 3:
             special_teams_n.append(i)
     return offense_n, defense_n, special_teams_n
+
+def new_goals(special_teams):
+    plus_1 = []
+    plus_2 = []
+    for i in range(len(special_teams)):
+        if special_teams[i] >= 2:
+            plus_2.append(i)
+        if special_teams[i] >= 1:
+            plus_1.append(i)
+    return plus_1, plus_2
 
 def max_team(category):
     maximum = []
@@ -106,8 +120,146 @@ def print_stats_two(num_met_goal, won, phase1, phase2):
     print('The Number of Those Teams That Won is: ' + str(num_won(num_met_goal, won)))
     print('Thats a Clip of: ' + str(num_won(num_met_goal,won)/len(num_met_goal)))
 
-def calculate_stats(conference):
-    sort = database.conference_sort(conference)
+def significance_test(r, size):
+    x = (size-2)/(1 - (r*r))
+    t = r * math.sqrt(x)
+    print('Significance: ')
+    print(t)
+
+def calc_correlation(values, win_percent):
+    frequencies = [1 for i in range(len(values))]
+    vsm = calc_standard_dev(values, frequencies)
+    wsm = calc_standard_dev(win_percent, frequencies)
+    x = (len(values) - 1)*(vsm[0])*(wsm[0])
+    n = 0
+    for i in range(len(values)):
+        n += (values[i] * win_percent[i])
+    n = n - ((len(values)) * vsm[1] * wsm[1])
+    r = n/x
+    print('len: ')
+    print(len(values))
+    print('r value: ')
+    print(r)
+    significance_test(r, len(values))
+
+def calc_standard_dev(values, frequencies):
+    mean = 0
+    num = 0
+    for i in range(len(values)):
+        mean += (values[i] * frequencies[i])
+        num += frequencies[i]
+    mean = (mean/num)
+    print('mean: ')
+    print(mean)
+    dfm2 = []
+    for i in range(len(values)):
+        x = values[i] - mean
+        x = (x * x)
+        x = frequencies[i] * x
+        dfm2.append(x)
+    n = sum(dfm2)
+    n = n/(num - 1)
+    return math.sqrt(n), mean
+
+
+def plot_against_wins(plusminus, wins, tag):
+    plot = {}
+    num4 = 0
+    numm4 = 0
+    for i in range(len(plusminus)):
+        if plot.get(plusminus[i]) == None:
+            plot[plusminus[i]] = [wins[i], 1]
+        else:
+            plot[plusminus[i]][0] += wins[i]
+            plot[plusminus[i]][1] += 1
+    print('Four Occured: ')
+    print(num4)
+    print('Minus Four Occured: ')
+    print(numm4)
+    score = []
+    win_total = []
+    frequency = []
+    win_percent = []
+    mode_freq = []
+    mode_valf = 0
+    mode_win = []
+    mode_valw = 0
+    for val in list(plot.keys()):
+        if val == 5:
+            print('Val 5: ')
+            print(val)
+            print(plot[val][1])
+        if val == -5:
+            print('Val -5: ')
+            print(val)
+            print(plot[val][1])
+        if plot[val][1] > mode_valf:
+            mode_valf = plot[val][1]
+            mode_freq = [val]
+        elif plot[val][1] == mode_valf:
+            mode_freq.append(val)
+        if plot[val][0] > mode_valw:
+            mode_valw = plot[val][0]
+            mode_win = [val]
+        elif plot[val][0] == mode_valw:
+            mode_valw = plot[val][0]
+            mode_win.append(val)
+        score.append(val)
+        win_total.append(plot[val][0])
+        frequency.append(plot[val][1])
+        win_percent.append((plot[val][0])/plot[val][1])
+    print('Frequency Dev: ')
+    print(calc_standard_dev(score, frequency)[0])
+    print('Win total Dev: ')
+    print(calc_standard_dev(score, win_total)[0])
+    calc_correlation(score, win_percent)
+    print('Freq Mode: ')
+    print(mode_freq)
+    print('Val Freq Mode: ')
+    print(mode_valf)
+    print('Win Mode: ')
+    print(mode_win)
+    print('Val Win Mode: ')
+    print(mode_valw)
+    test_results = database.conference_sort('PAC', names.adjusted)
+    print(len(test_results[1]))
+    if tag == 'o':
+        popt = models.best_fit(score, win_percent, models.sigmoid)
+        print('offense test score:')
+        print(models.test_model(test_results[1], test_results[4], popt, models.sigmoid))
+    elif tag == 'd':
+        print('defense test score:')
+        popt = models.best_fit(score, win_percent, models.sigmoid)
+        print(models.test_model(test_results[2], test_results[4], popt, models.sigmoid))
+    else:
+        print('specials test score:')
+        print(score)
+        popt = models.best_fit(score, win_percent, models.cos_curve)
+        print(models.test_model(test_results[3], test_results[4], popt, models.cos_curve))
+    models.regress_this(plusminus, wins)
+    plt.scatter(score, win_total)
+    plt.title('Special Teams Win Total')
+    plt.xlabel('Special Teams Plus Minus')
+    plt.ylabel('Win Total')
+    plt.show()
+    plt.scatter(score, frequency)
+    plt.title('Special Teams Frequency')
+    plt.xlabel('Special Teams Plus Minus')
+    plt.ylabel('Frequency')
+    plt.show()
+    plt.scatter(score, win_percent)
+    plt.title('Special Teams Win Percent')
+    plt.xlabel('Special Teams Plus Minus')
+    plt.ylabel('Win Percentage')
+    plt.show()
+    
+
+
+def calculate_stats(conference, data_base):
+    if conference == 'ALL':
+        sort = database.get_all(data_base)
+    else:
+        sort = database.conference_sort(conference, data_base)
     teams = sort[0]
     offense = sort[1]
     defense = sort[2]
@@ -127,7 +279,7 @@ def calculate_stats(conference):
     offense_defense = met_two_goals(num_met_goal[0], num_met_goal[1])
     print_stats_two(offense_defense, won, 'Offense', 'Defense')
     offense_specials = met_two_goals(num_met_goal[0], num_met_goal[2])
-    print_stats_two(offense_specials, won, 'Offense', 'Defense')
+    print_stats_two(offense_specials, won, 'Offense', 'Special Teams')
     defense_specials = met_two_goals(num_met_goal[1], num_met_goal[2])
     print_stats_two(defense_specials, won, 'Defense', 'Special Teams')
     all_three = met_three_goals(num_met_goal[0], num_met_goal[1], num_met_goal[2])
@@ -135,3 +287,30 @@ def calculate_stats(conference):
             + str(len(all_three)))
     print('The Number of Those Teams That Won is ' + str(num_won(all_three, won)))
     print('Thats a Clip of: ' + str(num_won(all_three, won)/len(all_three)))
+    print('With Special Teams Goal +1: ')
+    new_goal = new_goals(special_teams)
+    for goal in new_goal:
+        print_stats_one(goal, won, 'Special Teams')
+        offense_specials = met_two_goals(num_met_goal[0], goal)
+        print_stats_two(offense_specials, won, 'Offense', 'Special Teams')
+        defense_specials = met_two_goals(num_met_goal[1], goal)
+        print_stats_two(defense_specials, won, 'Defense', 'Special Teams')
+        all_three = met_three_goals(num_met_goal[0], num_met_goal[1], goal)
+        print('The Number of Teams That Met The Goal in All Three Phases is: '
+                + str(len(all_three)))
+        print('The Number of Those Teams That Won is ' + str(num_won(all_three, won)))
+        print('Thats a Clip of: ' + str(num_won(all_three, won)/len(all_three)))
+    print('Offense SD: ')
+    popt_o = plot_against_wins(offense, won, 'o')
+    print('Defense SD: ')
+    popt_d = plot_against_wins(defense, won, 'd')
+    print('Combined Score: ')
+    models.dual_prediction(offense, defense, won)
+    print('Special Teams SD: ')
+    plot_against_wins(special_teams, won, 's')
+    #plt.scatter(offense, defense)
+    #plt.show()
+    #plt.scatter(offense, special_teams)
+    #plt.show()
+    #plt.scatter(defense, special_teams)
+    #plt.show()

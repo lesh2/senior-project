@@ -3,6 +3,7 @@ import requests
 import calculations 
 import database
 import links
+import databasenames as names
 
 def calcfieldposition(start, team): #calculate the field position for a team
     startpos = ''.join([i for i in start if i.isdigit()]) #get the yard line
@@ -28,6 +29,16 @@ def calcavgyards(avgyards, opponents, punt, kickoff): #calculate the average pun
            val2 = sum(kickoff[team])/len(kickoff[team]) #sum up number of yards and divide by number of kickoffs
            avgyards[team]['Kickoff'] = val2
     return avgyards
+
+def adjusted_special_plus_minus(plusminus, avgyards, team1, team2):
+    if (avgyards[team1]['Kickoff'] > avgyards[team2]['Kickoff'] and avgyards[team1]['Punt'] > avgyards[team2]['Punt']):
+        plusminus[team1]['Special Teams'] += 1
+        plusminus[team2]['Special Teams'] -= 1
+        
+    elif (avgyards[team2]['Kickoff'] > avgyards[team1]['Kickoff'] and avgyards[team2]['Punt'] > avgyards[team1]['Punt']): 
+        plusminus[team2]['Special Teams'] += 1
+        plusminus[team1]['Special Teams'] -= 1    
+    return plusminus
 
 def calcspecialplusminus(plusminus, avgyards, team1, team2): #calculate the special teams plusminus score
     if (avgyards[team1]['Kickoff'] > avgyards[team2]['Kickoff']): #determine which team (or neither) had a higher kick off average 
@@ -101,6 +112,7 @@ def isPunt(team, punt, plusminus, touchdowns, start, i): #Determine the changes 
                 plusminus[adversary]['Special Teams'] -= 1
     return punt, plusminus, touchdowns
 
+#exact same as punt, but also determine if the previous drive resulted in a defensive touch down by checking the previous results and assigning points accordingly
 def isKickoff(result, team, kickoff, plusminus, touchdowns, turnovers, start, i, opponents):
     if (i != 0):
         if (result[i-1] == 'FUMB' or result[i-1] == 'INT'):
@@ -136,6 +148,8 @@ def getScore(plays):
             score = plays.find('section', {'id': '4th'}).findAll('dl')
     else:
         score = plays.find('section', {'id': '4th'}).findAll('dl')
+    if len(score) == 0:
+        return None
     score = score[len(score) - 1]
     score = score.find('dd').text
     score = list(score)
@@ -163,9 +177,11 @@ def scrape(url):
     driveChart = soup.find('section', {'id' : "drive-chart" })
     if driveChart == None:
         return None
+    #This places the drive chart in a dicitionary seperated by drives. I need to make this whole thing more abstract so it can be used on the second website template
     driveChart = driveChart.find('table')
     driveChart = driveChart.findAll('td')
     plays = soup.find('section', {'id' : "play-by-play"})
+    #This goes through the play by play and sorts the plays by quarter and drive. Pop the first one because it recaps who won the toss and the captians which does not matter.
     playByPlay = {'1st' : [], '2nd' : [], '3rd' : [], '4th' : [], 'OT' : []}
     playByPlay['1st'] = (plays.find('section' , {'id' : '1st'})).findAll('table')
     playByPlay['1st'].pop(0)
@@ -178,16 +194,20 @@ def scrape(url):
         playByPlay['4th'] = fourth.findAll('table')
     else:
         return None
+    #ensures OT games are added
     OT = plays.find('section', {'id' : 'OT'})
     if OT:
         playByPlay['OT'] = OT.findAll('table')
     results = getScore(plays)
+    if results == None:
+        return None
     print(results[0])
     print(results[1])
     return driveChart, playByPlay, results
 #print(type(find[22]))
 #print(find[22].attrs)
 
+#create the dictionaries I will use throughout assigning the team as the main key and creating a dictionary within to store totals
 def initializeTable(opponents):
     punt = {}
     kickoff = {}
@@ -204,11 +224,13 @@ def initializeTable(opponents):
         turnovers[o] = 0
     return punt, kickoff, plusminus, avgyards, touchdowns, turnovers
 
+# go through the play by play and determine if a block occured by finding the word block and determining who it was for.Also find if a dropped punt or kick off occured by remembering if the current play is a special teams play and searchingfor the word fumble.
 def calculateBlocks(playByPlay, plusminus, opponents, possession):
     driveCounter = 0
     for quarters in playByPlay.keys():
         for drives in playByPlay[quarters]:
             descriptions = drives.findAll('td')
+            #go through each word in a play.
             for string in descriptions:
                 isSpecialTeams = False
                 if len(string) > 0:
@@ -248,13 +270,20 @@ def whoWon(results, plusminus):
         results[1][0] = 0
     count1 = 0
     count2 = 0
+    count3 = 0
+    count4 = 0
     keys = list(plusminus.keys())
-    for char in results[0][0]:
-        if char in keys[0]:
+    for char in keys[0]:
+        if char in results[0][0]:
             count1 += 1
-        if char in keys[1]:
+        if char in results[1][1]:
             count2 += 1
-    if count1 > count2:
+    for char in keys[1]:
+        if char in results[0][0]:
+            count3 += 1
+        if char in results[1][1]:
+            count4 += 1
+    if count1 > count2 or count4 > count3:
         plusminus[keys[0]]['Won'] = results[0][1]
         plusminus[keys[1]]['Won'] = results[1][0]
     else:
@@ -390,24 +419,20 @@ def scrapeConference(conference):
             plusminus_conference.append(game)
     return plusminus_conference
 
+def quick_add(links, name, db):
+    links_results = scrapeConference(links)
+    database.add_to_table(links_results, name, db)
 
 def main():
-    #umac_results = scrapeConference(umac)
-    #print(len(umac_results))
-    #database.add_to_table(umac_results)
-    #calculations.calculate_stats(umac_results)
-    #saa_results = scrapeConference(saa)
-    #print(len(saa_results))
-    #nwc_results = scrapeConference(links.nwc)
-    #print(len(nwc_results))
-    #wiac_results = scrapeConference(links.wiac)
-    #print(len(wiac_results))
-    #cciw_results = scrapeConference(links.cciw)
-    #print(len(cciw_results))
-    #miac_results = scrapeConference(miac)
-    #print(len(miac_results))
-    asc_results = scrapeConference(links.asc)
-    print(len(asc_results))
-    database.add_to_table(asc_results, 'ASC')
+    quick_add(links.umac, 'UMAC', names.removed)
+    quick_add(links.saa, 'SAA', names.removed)
+    quick_add(links.nwc, 'NWC', names.removed)
+    quick_add(links.wiac, 'WIAC', names.removed)
+    quick_add(links.cciw, 'CCIW', names.removed)
+    quick_add(links.miac, 'MIAC', names.removed)
+    quick_add(links.asc, 'ASC', names.removed)
+    quick_add(links.oac, 'OAC', names.removed)
+    quick_add(links.e8, 'E8', names.removed) 
 
-main()
+quick_add(links.liberty, 'LIBERTY', names.actual)
+quick_add(links.pac, 'PAC', names.actual)
